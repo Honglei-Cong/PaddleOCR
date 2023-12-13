@@ -12,7 +12,6 @@ sys.path.append(__dir__)
 sys.path.insert(0, os.path.abspath(os.path.join(__dir__, '..')))
 
 os.environ["FLAGS_allocator_strategy"] = 'auto_growth'
-import cv2
 import json
 import paddle
 
@@ -24,7 +23,14 @@ from ppocr.utils.visual import draw_ser_results
 from ppocr.utils.utility import get_image_file_list, load_vqa_bio_label_maps
 import tools.program as program
 from invoice import Invoice
+from pdf2image import convert_from_path
+from PIL import Image
+from reportlab.pdfbase.ttfonts import ttfont
+from reportlab.pdfbase import pdfmetrics
+from easyofd.ofd import OFD
 
+pdfmetrics.registerFonts(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
+pdfmetrics.registerFonts(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
 
 def to_tensor(data):
     import numbers
@@ -116,9 +122,20 @@ if __name__ == '__main__':
             img_path = info
             data = {'img_path': img_path}
 
-        save_img_path = os.path.join(
-            config['Global']['save_res_path'],
-            os.path.splitext(os.path.basename(img_path))[0] + "_ser.jpg")
+        if os.path.basename(img_path)[-3:] == 'pdf':
+            new_img_path = img_path + '.jpg'
+            if not os.path.exists(new_img_path):
+                images = convert_from_path(img_path)
+                images[0].save(new_img_path)
+            data['img_path'] = new_img_path
+        elif os.path.basename(img_path)[-3:] == 'ofd':
+            new_img_path = img_path + '.jpg'
+            if not os.path.exists(new_img_path):
+                ofd = OFD()
+                ofd.read(img_path, 'path')
+                images = ofd.to_jpg()
+                Image.fromarray(images[0]).save(new_img_path)
+            data['img_path'] = new_img_path
 
         result, _ = ser_engine(data)
         result = result[0]

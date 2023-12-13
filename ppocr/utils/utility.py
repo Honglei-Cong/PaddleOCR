@@ -53,7 +53,7 @@ def get_check_global_params(mode):
 
 
 def _check_image_file(path):
-    img_end = {'jpg', 'bmp', 'png', 'jpeg', 'rgb', 'tif', 'tiff', 'gif', 'pdf'}
+    img_end = {'jpg', 'bmp', 'png', 'jpeg', 'rgb', 'tif', 'tiff', 'gif', 'pdf', 'ofd'}
     return any([path.lower().endswith(e) for e in img_end])
 
 

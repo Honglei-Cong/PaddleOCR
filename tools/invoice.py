@@ -27,32 +27,62 @@ class TokenRange:
         return True
 
 class InvoiceLayout:
-    layout = {
+    supported_layouts = [
+        {
+            "keyword": "社会信用代码",
+            "layout": {
         "title": TokenRange(20, 0, 80, 20),
         "header": TokenRange(70, 0, 100, 20),
         "buyer": TokenRange(1, 20, 50, 45),
         "seller": TokenRange(51, 20, 100, 45),
         "details": TokenRange(0, 43, 100, 90),
         "summary": TokenRange(1, 90, 100, 100),
-    }
+            }
+        },
+        {
+            "keyword": "开户行及账号",
+            "layout": {
+        "title": TokenRange(20, 0, 80, 20),
+        "header": TokenRange(70, 0, 100, 20),
+        "buyer": TokenRange(1, 20, 50, 45),
+        "seller": TokenRange(51, 20, 100, 45),
+        "details": TokenRange(0, 43, 100, 90),
+        "summary": TokenRange(1, 90, 100, 100),
+            }
+        }
+    ]
 
-    def getTitleRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["title"])
+    @staticmethod
+    def getLayout(tokens):
+        for i in range(InvoiceLayout.supported_layouts):
+            l = InvoiceLayout.supported_layouts[i]
+            for tok in tokens:
+                if l['keyworkd'] in tok['transcriptioin']:
+                    return InvoiceLayout(i)
+        return None
+    
+    def __init__(self, layout_id):
+        self.layout = None
+        if layout_id in range(len(InvoiceLayout.supported_layouts)):
+            self.layout = InvoiceLayout.supported_layouts[layout_id]['layout']
 
-    def getHeaderRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["header"])
+    def getTitleRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["title"])
 
-    def getBuyerRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["buyer"])
+    def getHeaderRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["header"])
 
-    def getSellerRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["seller"])
+    def getBuyerRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["buyer"])
 
-    def getSummaryRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["summary"])
+    def getSellerRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["seller"])
 
-    def getDetailsRange(invoiceRange):
-        return InvoiceLayout.getRange(invoiceRange, InvoiceLayout.layout["details"])
+    def getSummaryRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["summary"])
+
+    def getDetailsRange(self, invoiceRange):
+        return self.getRange(invoiceRange, self.layout["details"])
 
     def getRange(invoiceRange, rng):
         if not rng:
@@ -104,7 +134,7 @@ class InvoiceTitle:
     def parse(self):
         self.logger.info("title tokens: {}".format(self.tokens))
         for tok in self.tokens:
-            if "增值税" in tok:
+            if "值税" in tok:
                 self.invoice_type = 2
                 return
             elif "普通" in tok:
@@ -147,7 +177,7 @@ class InvoiceHeader(InvoiceSegment):
         return InvoiceHeader.required_fields
 
 class InvoiceBuyerInfo(InvoiceSegment):
-    required_fields = ["名称", "统一社会信用代码"]
+    required_fields = ["名称", "社会信用代码"]
 
     def __init__(self, tokens, r, logger):
         return super().__init__("buyer", tokens, r, logger)
@@ -156,7 +186,7 @@ class InvoiceBuyerInfo(InvoiceSegment):
         return InvoiceBuyerInfo.required_fields
 
 class InvoiceSellerInfo(InvoiceSegment):
-    required_fields = ["名称", "统一社会信用代码"]
+    required_fields = ["名称", "社会信用代码"]
 
     def __init__(self, tokens, r, logger):
         return super().__init__("seller", tokens, r, logger)
@@ -223,6 +253,13 @@ class InvoiceDetails(InvoiceSegment):
         for col in self.columns:
             if required_column in col["name"]:
                 return True
+        self.columns.sort(key=lambda col: col['left'])
+        if self.columns[-2]['name'] + self.columns[-1]['name'] == required_column:
+            self.columns[-2]['name'] = required_column
+            self.columns[-2]['right'] = max(self.columns[-2]['right'], self.columns[-1]['right'])
+            self.columns.pop()
+            return True
+
         return False
 
     def get_row_ranges(self):
@@ -248,6 +285,7 @@ class Invoice:
     def __init__(self, tokens, logger):
         self.tokens = tokens
         self.logger = logger
+        self.layout = None
         self.title = None
         self.header = None
         self.buyer = None
@@ -258,17 +296,20 @@ class Invoice:
     def parse(self):
         token_ranges = getInvoiceRange(self.tokens)
         self.logger.info("token ranges: {}".format(token_ranges))
-        self.title = InvoiceTitle(self.tokens, InvoiceLayout.getTitleRange(token_ranges), self.logger)
+        self.layout = InvoiceLayout.getLayout(self.tokens)
+        if self.layout is None:
+            return
+        self.title = InvoiceTitle(self.tokens, self.layout.getTitleRange(token_ranges), self.logger)
         self.title.parse()
-        self.header = InvoiceHeader(self.tokens, InvoiceLayout.getHeaderRange(token_ranges), self.logger)
+        self.header = InvoiceHeader(self.tokens, self.layout.getHeaderRange(token_ranges), self.logger)
         self.header.parse()
-        self.buyer = InvoiceBuyerInfo(self.tokens, InvoiceLayout.getBuyerRange(token_ranges), self.logger)
+        self.buyer = InvoiceBuyerInfo(self.tokens, self.layout.getBuyerRange(token_ranges), self.logger)
         self.buyer.parse()
-        self.seller = InvoiceSellerInfo(self.tokens, InvoiceLayout.getSellerRange(token_ranges), self.logger)
+        self.seller = InvoiceSellerInfo(self.tokens, self.layout.getSellerRange(token_ranges), self.logger)
         self.seller.parse()
-        self.summary = InvoiceSummaryInfo(self.tokens, InvoiceLayout.getSummaryRange(token_ranges), self.logger)
+        self.summary = InvoiceSummaryInfo(self.tokens, self.layout.getSummaryRange(token_ranges), self.logger)
         self.summary.parse()
-        self.details = InvoiceDetails(self.tokens, InvoiceLayout.getDetailsRange(token_ranges), self.logger)
+        self.details = InvoiceDetails(self.tokens, self.layout.getDetailsRange(token_ranges), self.logger)
         self.details.parse()
 
     def __str__(self):

@@ -31,33 +31,33 @@ class InvoiceLayout:
         {
             "keyword": "社会信用代码",
             "layout": {
-        "title": TokenRange(20, 0, 80, 20),
-        "header": TokenRange(70, 0, 100, 20),
-        "buyer": TokenRange(1, 20, 50, 45),
-        "seller": TokenRange(51, 20, 100, 45),
-        "details": TokenRange(0, 43, 100, 90),
-        "summary": TokenRange(1, 90, 100, 100),
+        "title": { "range": TokenRange(20, 0, 80, 20), "fields": []},
+        "header": { "range": TokenRange(70, 0, 100, 20), "fields": ["发票号码", "发票日期"]},
+        "buyer": { "range": TokenRange(1, 20, 50, 45), "fields": ["名称", "社会信用代码"]},
+        "seller": { "range": TokenRange(51, 20, 100, 45), "fields": ["名称", "社会信用代码"]},
+        "details": { "range": TokenRange(0, 43, 100, 90), "fields": []},
+        "summary": { "range": TokenRange(1, 90, 100, 100), "fields": ["小写"]},
             }
         },
         {
             "keyword": "开户行及账号",
             "layout": {
-        "title": TokenRange(20, 0, 80, 20),
-        "header": TokenRange(70, 0, 100, 20),
-        "buyer": TokenRange(1, 20, 50, 45),
-        "seller": TokenRange(51, 20, 100, 45),
-        "details": TokenRange(0, 43, 100, 90),
-        "summary": TokenRange(1, 90, 100, 100),
+        "title": { "range": TokenRange(20, 0, 73, 20), "fields": []},
+        "header": { "range": TokenRange(70, 0, 100, 20), "fields": ["发票代码", "发票号码", "开票日期"]},
+        "buyer": { "range": TokenRange(2, 20, 60, 40), "fields": ["称","纳税人识别号","地址","开户行及账号"]},
+        "seller": { "range": TokenRange(2, 80, 60, 100), "fields": ["称","纳税人识别号","地址","开户行及账号"]},
+        "details": { "range": TokenRange(0, 38, 100, 77), "fields": []},
+        "summary": { "range": TokenRange(1, 76, 100, 84), "fields": ["小写"]},
             }
         }
     ]
 
     @staticmethod
     def getLayout(tokens):
-        for i in range(InvoiceLayout.supported_layouts):
+        for i in range(len(InvoiceLayout.supported_layouts)):
             l = InvoiceLayout.supported_layouts[i]
             for tok in tokens:
-                if l['keyworkd'] in tok['transcriptioin']:
+                if l['keyword'] in tok['transcription']:
                     return InvoiceLayout(i)
         return None
     
@@ -66,23 +66,41 @@ class InvoiceLayout:
         if layout_id in range(len(InvoiceLayout.supported_layouts)):
             self.layout = InvoiceLayout.supported_layouts[layout_id]['layout']
 
+    def getTitleFields(self):
+        return self.layout["title"]["fields"]
+
     def getTitleRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["title"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["title"]["range"])
+
+    def getHeaderFields(self):
+        return self.layout["header"]["fields"]
 
     def getHeaderRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["header"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["header"]["range"])
+
+    def getBuyerFields(self):
+        return self.layout["buyer"]["fields"]
 
     def getBuyerRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["buyer"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["buyer"]["range"])
+
+    def getSellerFields(self):
+        return self.layout["seller"]["fields"]
 
     def getSellerRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["seller"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["seller"]["range"])
+
+    def getSummaryFields(self):
+        return self.layout["summary"]["fields"]
 
     def getSummaryRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["summary"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["summary"]["range"])
+
+    def getDetailsFields(self):
+        return self.layout["details"]["fields"]
 
     def getDetailsRange(self, invoiceRange):
-        return self.getRange(invoiceRange, self.layout["details"])
+        return InvoiceLayout.getRange(invoiceRange, self.layout["details"]["range"])
 
     def getRange(invoiceRange, rng):
         if not rng:
@@ -108,6 +126,8 @@ def getInvoiceRange(result):
         if tok['bbox'][3] > b or b == -1:
             if "价税合计" in tok['transcription']:
                 b = tok['bbox'][3] + 20
+            if "开户行及账号" in tok['transcription']:
+                b = tok['bbox'][3] + 20
     return TokenRange(l, t, r, b)
 
 class InvoiceTitle:
@@ -117,7 +137,7 @@ class InvoiceTitle:
         2: "电子发票（增值税专用发票）"
     }
 
-    def __init__(self, tokens, r, logger):
+    def __init__(self, tokens, r, f, logger):
         self.range = r
         self.logger = logger
         self.tokens = []
@@ -145,10 +165,11 @@ class InvoiceTitle:
         return "{}".format(self.getType())
 
 class InvoiceSegment:
-    def __init__(self, segname, tokens, r, logger):
+    def __init__(self, segname, tokens, r, fields, logger):
         self.segname = segname
         self.range = r
         self.logger = logger
+        self.requied_fields = fields
         self.tokens = []
         self.values = {}
         for tok in tokens:
@@ -156,7 +177,7 @@ class InvoiceSegment:
                 self.tokens.append(tok['transcription'])
 
     def getRequiredFields(self):
-        return []
+        return self.requied_fields
 
     def parse(self):
         for f in self.getRequiredFields():
@@ -168,44 +189,24 @@ class InvoiceSegment:
         return "{}".format(self.values)
 
 class InvoiceHeader(InvoiceSegment):
-    required_fields = ["发票号码", "发票日期"]
-
-    def __init__(self, tokens, r, logger):
-        return super().__init__("header", tokens, r, logger)
-
-    def getRequiredFields(self):
-        return InvoiceHeader.required_fields
+    def __init__(self, tokens, r, f, logger):
+        return super().__init__("header", tokens, r, f, logger)
 
 class InvoiceBuyerInfo(InvoiceSegment):
-    required_fields = ["名称", "社会信用代码"]
-
-    def __init__(self, tokens, r, logger):
-        return super().__init__("buyer", tokens, r, logger)
-
-    def getRequiredFields(self):
-        return InvoiceBuyerInfo.required_fields
+    def __init__(self, tokens, r, f, logger):
+        return super().__init__("buyer", tokens, r, f, logger)
 
 class InvoiceSellerInfo(InvoiceSegment):
-    required_fields = ["名称", "社会信用代码"]
-
-    def __init__(self, tokens, r, logger):
-        return super().__init__("seller", tokens, r, logger)
-
-    def getRequiredFields(self):
-        return InvoiceSellerInfo.required_fields
+    def __init__(self, tokens, r, f, logger):
+        return super().__init__("seller", tokens, r, f, logger)
 
 class InvoiceSummaryInfo(InvoiceSegment):
-    required_fields = ["小写"]
-
-    def __init__(self, tokens, r, logger):
-        return super().__init__("summary", tokens, r, logger)
-
-    def getRequiredFields(self):
-        return InvoiceSummaryInfo.required_fields
+    def __init__(self, tokens, r, f, logger):
+        return super().__init__("summary", tokens, r, f, logger)
 
 class InvoiceDetails(InvoiceSegment):
-    def __init__(self, tokens, r, logger):
-        super().__init__("details", tokens, r, logger)
+    def __init__(self, tokens, r, f, logger):
+        super().__init__("details", tokens, r, f, logger)
         self.tokens = []
         self.columns = []
         self.column_tokens = []
@@ -299,17 +300,17 @@ class Invoice:
         self.layout = InvoiceLayout.getLayout(self.tokens)
         if self.layout is None:
             return
-        self.title = InvoiceTitle(self.tokens, self.layout.getTitleRange(token_ranges), self.logger)
+        self.title = InvoiceTitle(self.tokens, self.layout.getTitleRange(token_ranges), self.layout.getTitleFields(), self.logger)
         self.title.parse()
-        self.header = InvoiceHeader(self.tokens, self.layout.getHeaderRange(token_ranges), self.logger)
+        self.header = InvoiceHeader(self.tokens, self.layout.getHeaderRange(token_ranges), self.layout.getHeaderFields(), self.logger)
         self.header.parse()
-        self.buyer = InvoiceBuyerInfo(self.tokens, self.layout.getBuyerRange(token_ranges), self.logger)
+        self.buyer = InvoiceBuyerInfo(self.tokens, self.layout.getBuyerRange(token_ranges), self.layout.getBuyerFields(), self.logger)
         self.buyer.parse()
-        self.seller = InvoiceSellerInfo(self.tokens, self.layout.getSellerRange(token_ranges), self.logger)
+        self.seller = InvoiceSellerInfo(self.tokens, self.layout.getSellerRange(token_ranges), self.layout.getSellerFields(), self.logger)
         self.seller.parse()
-        self.summary = InvoiceSummaryInfo(self.tokens, self.layout.getSummaryRange(token_ranges), self.logger)
+        self.summary = InvoiceSummaryInfo(self.tokens, self.layout.getSummaryRange(token_ranges), self.layout.getSummaryFields(), self.logger)
         self.summary.parse()
-        self.details = InvoiceDetails(self.tokens, self.layout.getDetailsRange(token_ranges), self.logger)
+        self.details = InvoiceDetails(self.tokens, self.layout.getDetailsRange(token_ranges), self.layout.getDetailsFields(), self.logger)
         self.details.parse()
 
     def __str__(self):

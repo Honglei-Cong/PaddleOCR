@@ -25,12 +25,12 @@ import tools.program as program
 from invoice import Invoice
 from pdf2image import convert_from_path
 from PIL import Image
-from reportlab.pdfbase.ttfonts import ttfont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
 from easyofd.ofd import OFD
 
-pdfmetrics.registerFonts(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
-pdfmetrics.registerFonts(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
+pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
+pdfmetrics.registerFont(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
 
 def to_tensor(data):
     import numbers

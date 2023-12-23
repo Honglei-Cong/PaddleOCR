@@ -702,13 +702,12 @@ def preprocess(is_train=False):
         loggers.append(log_writer)
     else:
         log_writer = None
-    print_dict(config, logger)
+    # print_dict(config, logger)
 
     if loggers:
         log_writer = Loggers(loggers)
     else:
         log_writer = None
 
-    logger.info('train with paddle {} and device {}'.format(paddle.__version__,
-                                                            device))
+    logger.debug('train with paddle {} and device {}'.format(paddle.__version__, device))
     return config, device, logger, log_writer

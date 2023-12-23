@@ -113,10 +113,13 @@ class InvoiceApp:
 
     def Initialize(self):
         self.config, _, self.logger, _ = program.preprocess()
-        self.ser_engine = SerPredictor(self.config)
-        self.initialize_ofd()
-        self.initialized = True
-        return True
+        try:
+            self.ser_engine = SerPredictor(self.config)
+            self.initialize_ofd()
+            self.initialized = True
+        except Exception as e:
+            self.logger.error("initialize failed: {}".format(e))
+        return self.initialized
 
     def initialize_ofd(self):
         pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
@@ -148,25 +151,35 @@ class InvoiceApp:
         if not self.supported_filetype(img_path):
             return None
         data = {'img_path': img_path}
-        if os.path.basename(img_path)[-3:] == 'pdf':
-            new_img_path = img_path + '.png'
-            self.convert_pdf_to_image(img_path, new_img_path)
-            data['img_path'] = new_img_path
-        elif os.path.basename(img_path)[-3:] == 'ofd':
-            new_img_path = img_path + '.jpg'
-            self.convert_ofd_to_image(img_path, new_img_path)
-            data['img_path'] = new_img_path
 
-        result, _ = self.ser_engine(data)
-        invoice = Invoice(result[0], self.logger)
-        invoice.parse()
-        # self.logger.info("{}".format(invoice))
-        return invoice.get_parse_result()
+        try:
+            if os.path.basename(img_path)[-3:] == 'pdf':
+                new_img_path = img_path + '.png'
+                self.convert_pdf_to_image(img_path, new_img_path)
+                data['img_path'] = new_img_path
+            elif os.path.basename(img_path)[-3:] == 'ofd':
+                new_img_path = img_path + '.jpg'
+                self.convert_ofd_to_image(img_path, new_img_path)
+                data['img_path'] = new_img_path
+        except Exception as e:
+            self.logger.error("converting {} failed: {}", img_path, e)
+            return None
+
+        try:
+            result, _ = self.ser_engine(data)
+            invoice = Invoice(result[0], self.logger)
+            invoice.parse()
+            # self.logger.info("{}".format(invoice))
+            return invoice.get_parse_result()
+        except Exception as e:
+            self.logger.error("processing {} failed: {}", img_path, e)
+            return None
 
 
 if __name__ == '__main__':
     app = InvoiceApp()
-    app.Initialize()
+    if not app.Initialize():
+        exit(-1)
 
     infer_imgs = get_image_file_list(app.config['Global']['infer_img'])
     for idx, img in enumerate(infer_imgs):

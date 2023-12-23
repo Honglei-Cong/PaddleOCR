@@ -136,8 +136,16 @@ class InvoiceApp:
             images = ofd.to_jpg()
             Image.fromarray(images[0]).save(image_path)
 
+    def supported_filetype(self, path):
+        img_end = {'jpg', 'bmp', 'png', 'jpeg', 'rgb', 'tif', 'tiff', 'gif', 'pdf', 'ofd'}
+        return any([path.lower().endswith(e) for e in img_end])
+
     def Process(self, img_path):
         if not self.initialized:
+            return None
+        if not os.path.exists(img_path):
+            return None
+        if not self.supported_filetype(img_path):
             return None
         data = {'img_path': img_path}
         if os.path.basename(img_path)[-3:] == 'pdf':
@@ -152,8 +160,8 @@ class InvoiceApp:
         result, _ = self.ser_engine(data)
         invoice = Invoice(result[0], self.logger)
         invoice.parse()
+        # self.logger.info("{}".format(invoice))
         return invoice.get_parse_result()
-        # logger.info("{}".format(invoice))
 
 
 if __name__ == '__main__':

@@ -6,6 +6,7 @@ from __future__ import print_function
 import numpy as np
 import os
 import sys
+import time
 
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(__dir__)
@@ -23,14 +24,7 @@ from ppocr.utils.visual import draw_ser_results
 from ppocr.utils.utility import get_image_file_list, load_vqa_bio_label_maps
 import tools.program as program
 from invoice import Invoice
-from pdf2image import convert_from_path
-from PIL import Image
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
-from easyofd.ofd import OFD
 
-pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
-pdfmetrics.registerFont(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
 
 def to_tensor(data):
     import numbers
@@ -104,7 +98,6 @@ class SerPredictor(object):
             preds, segment_offset_ids=batch[6], ocr_infos=batch[7])
         return post_result, batch
 
-
 if __name__ == '__main__':
     config, device, logger, vdl_writer = program.preprocess()
     # os.makedirs(config['Global']['save_res_path'], exist_ok=True)
@@ -123,12 +116,20 @@ if __name__ == '__main__':
             data = {'img_path': img_path}
 
         if os.path.basename(img_path)[-3:] == 'pdf':
+            from pdf2image import convert_from_path
             new_img_path = img_path + '.jpg'
             if not os.path.exists(new_img_path):
                 images = convert_from_path(img_path)
                 images[0].save(new_img_path)
             data['img_path'] = new_img_path
         elif os.path.basename(img_path)[-3:] == 'ofd':
+            from PIL import Image
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.pdfbase import pdfmetrics
+            from easyofd.ofd import OFD
+            pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
+            pdfmetrics.registerFont(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
+
             new_img_path = img_path + '.jpg'
             if not os.path.exists(new_img_path):
                 ofd = OFD()

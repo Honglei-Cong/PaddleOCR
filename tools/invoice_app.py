@@ -24,6 +24,11 @@ from ppocr.utils.visual import draw_ser_results
 from ppocr.utils.utility import get_image_file_list, load_vqa_bio_label_maps
 import tools.program as program
 from invoice import Invoice
+import fitz
+from PIL import Image
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+from easyofd.ofd import OFD
 
 
 def to_tensor(data):
@@ -98,52 +103,64 @@ class SerPredictor(object):
             preds, segment_offset_ids=batch[6], ocr_infos=batch[7])
         return post_result, batch
 
-if __name__ == '__main__':
-    config, device, logger, vdl_writer = program.preprocess()
-    # os.makedirs(config['Global']['save_res_path'], exist_ok=True)
+class InvoiceApp:
+    def __init__(self):
+        self.config = None
+        self.logger = None
+        self.invoice_parser = None
+        self.ser_engine = None
+        self.initialized = False
 
-    ser_engine = SerPredictor(config)
+    def Initialize(self):
+        self.config, _, self.logger, _ = program.preprocess()
+        self.ser_engine = SerPredictor(self.config)
+        self.initialize_ofd()
+        self.initialized = True
+        return True
 
-    infer_imgs = get_image_file_list(config['Global']['infer_img'])
-    for idx, info in enumerate(infer_imgs):
-        if config["Global"].get("infer_mode", None) is False:
-            data_line = info.decode('utf-8')
-            substr = data_line.strip("\n").split("\t")
-            img_path = os.path.join(data_dir, substr[0])
-            data = {'img_path': img_path, 'label': substr[1]}
-        else:
-            img_path = info
-            data = {'img_path': img_path}
+    def initialize_ofd(self):
+        pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
+        pdfmetrics.registerFont(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
 
+    def convert_pdf_to_image(self, pdf_path, image_path):
+        if not os.path.exists(image_path):
+            doc = fitz.open(pdf_path)
+            page = doc.load_page(0)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            pix.save(image_path)
+
+    def convert_ofd_to_image(self, ofd_path, image_path):
+        if not os.path.exists(image_path):
+            ofd = OFD()
+            ofd.read(ofd_path, 'path')
+            images = ofd.to_jpg()
+            Image.fromarray(images[0]).save(image_path)
+
+    def Process(self, img_path):
+        if not self.initialized:
+            return None
+        data = {'img_path': img_path}
         if os.path.basename(img_path)[-3:] == 'pdf':
-            import fitz
             new_img_path = img_path + '.png'
-            if not os.path.exists(new_img_path):
-                doc = fitz.open(img_path)
-                page = doc.load_page(0)
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                pix.save(new_img_path)
+            self.convert_pdf_to_image(img_path, new_img_path)
             data['img_path'] = new_img_path
         elif os.path.basename(img_path)[-3:] == 'ofd':
-            from PIL import Image
-            from reportlab.pdfbase.ttfonts import TTFont
-            from reportlab.pdfbase import pdfmetrics
-            from easyofd.ofd import OFD
-            pdfmetrics.registerFont(TTFont('宋体', './doc/invoice/AR-PL-SungtiL-GB.ttf'))
-            pdfmetrics.registerFont(TTFont('楷体', './doc/invoice/AR-PL-KaitiM-GB.ttf'))
-
             new_img_path = img_path + '.jpg'
-            if not os.path.exists(new_img_path):
-                ofd = OFD()
-                ofd.read(img_path, 'path')
-                images = ofd.to_jpg()
-                Image.fromarray(images[0]).save(new_img_path)
+            self.convert_ofd_to_image(img_path, new_img_path)
             data['img_path'] = new_img_path
 
-        result, _ = ser_engine(data)
-        result = result[0]
-        # logger.info("{}".format(result))
-
-        invoice = Invoice(result, logger)
+        result, _ = self.ser_engine(data)
+        invoice = Invoice(result[0], self.logger)
         invoice.parse()
-        logger.info("{}".format(invoice))
+        return invoice.get_parse_result()
+        # logger.info("{}".format(invoice))
+
+
+if __name__ == '__main__':
+    app = InvoiceApp()
+    app.Initialize()
+
+    infer_imgs = get_image_file_list(app.config['Global']['infer_img'])
+    for idx, img in enumerate(infer_imgs):
+        result = app.Process(img)
+        app.logger.info("{}".format(result))

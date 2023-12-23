@@ -1,7 +1,9 @@
 from flask import Flask, request, render_template
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from tools.invoice_app import InvoiceApp
 app = Flask(__name__)
+invoice_app = InvoiceApp()
 
 @app.route('/')
 def index():
@@ -15,6 +17,16 @@ def upload():
 
     return '上传成功'
 
+@app.route('/api/v1/invoice/ir', methods=['POST'])
+def ir():
+    params = request.get_json()
+    if 'filepath' in params:
+        result = invoice_app.Process(params['filepath'])
+        return "{}".format(result)
+    return ""
+
 if __name__ == '__main__':
+    if not invoice_app.Initialize():
+        exit(-1)
     app.run()
 

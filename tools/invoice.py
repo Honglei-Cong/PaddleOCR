@@ -313,7 +313,7 @@ class Invoice:
         self.details = InvoiceDetails(self.tokens, self.layout.getDetailsRange(token_ranges), self.layout.getDetailsFields(), self.logger)
         self.details.parse()
 
-    def __str__(self):
+    def get_parse_result(self):
         x = {
             "title": "{}".format(self.title),
             "header": "{}".format(self.header),
@@ -322,7 +322,10 @@ class Invoice:
             "summary": "{}".format(self.summary),
             "details": "{}".format(self.details)
         }
-        return "{}".format(x)
+        return x
+
+    def __str__(self):
+        return "{}".format(self.get_parse_result())
 
 if __name__ == "__main__":
     pass

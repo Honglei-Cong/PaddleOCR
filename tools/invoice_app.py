@@ -116,11 +116,13 @@ if __name__ == '__main__':
             data = {'img_path': img_path}
 
         if os.path.basename(img_path)[-3:] == 'pdf':
-            from pdf2image import convert_from_path
-            new_img_path = img_path + '.jpg'
+            import fitz
+            new_img_path = img_path + '.png'
             if not os.path.exists(new_img_path):
-                images = convert_from_path(img_path)
-                images[0].save(new_img_path)
+                doc = fitz.open(img_path)
+                page = doc.load_page(0)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                pix.save(new_img_path)
             data['img_path'] = new_img_path
         elif os.path.basename(img_path)[-3:] == 'ofd':
             from PIL import Image
